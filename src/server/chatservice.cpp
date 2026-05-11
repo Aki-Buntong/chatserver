@@ -57,8 +57,19 @@ void ChatService::redis_subscribe_message_handler(int channel, string message)
 // 服务器异常，业务重置方法
 void ChatService::reset()
 {
-    // 把online状态的用户，设置成offline
-    _userModel.resetState();
+    // 加锁：保护用户连接表
+    lock_guard<mutex> lock(_connMutex);
+
+    // 遍历当前服务器所有在线用户
+    for (auto &it : _userConnMap)
+    {
+        int userid = it.first;
+        // 删除该用户的 Redis 在线状态
+        _redis.del("user:" + to_string(userid));
+    }
+
+    // 清空本地用户连接表
+    _userConnMap.clear();
 }
 // 获取消息对应的处理器
 MsgHandler ChatService::getHandler(int msgid)
@@ -87,7 +98,8 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
     User user = _userModel.query(id);
     if (user.getId() == id && user.getPwd() == pwd)
     {
-        if (user.getState() == "online")
+        string onlineState = _redis.get("user:" + to_string(id));
+        if (!onlineState.empty())
         {
             // 该用户已登录，不允许重复登录
             json response;
@@ -108,8 +120,9 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
             _redis.subscribe(id);
 
             // 登陆成功,更新用户状态信息
-            user.setState("online");
-            _userModel.updateState(user);
+            // user.setState("online");
+            _redis.set("user:" + to_string(id), "online");
+            //_userModel.updateState(user);
             json response;
             response["msgid"] = LOGIN_MSG_ACK;
             response["errno"] = 0;
@@ -134,7 +147,8 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
                     json js;
                     js["id"] = user.getId();
                     js["name"] = user.getName();
-                    js["state"] = user.getState();
+                    string state = _redis.get("user:" + to_string(user.getId()));
+                    js["state"] = state.empty() ? "offline" : "online";
                     vec2.push_back(js.dump());
                 }
                 response["friends"] = vec2;
@@ -157,7 +171,8 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
                         json js;
                         js["id"] = user.getId();
                         js["name"] = user.getName();
-                        js["state"] = user.getState();
+                        string state = _redis.get("user:" + to_string(user.getId()));
+                        js["state"] = state.empty() ? "offline" : "online";
                         js["role"] = user.getRole();
                         vec3.push_back(js.dump());
                     }
@@ -227,8 +242,9 @@ void ChatService::loginout(const TcpConnectionPtr &conn, json &js, Timestamp tim
     _redis.unsubscribe(userid);
 
     // 更新用户的状态信息
-    User user(userid, "", "", "offline");
-    _userModel.updateState(user);
+    // User user(userid, "", "", "offline");
+    //_userModel.updateState(user);
+    _redis.del("user:" + to_string(userid));
 }
 
 // 处理客户端异常退出
@@ -250,20 +266,12 @@ void ChatService::clientCloseException(const TcpConnectionPtr &conn)
         }
         if (user.getId() != -1)
         {
-            user.setState("offline");
-            _userModel.updateState(user);
+            _redis.del("user:" + to_string(user.getId()));
         }
     }
 
     // 用户注销
     _redis.unsubscribe(user.getId());
-
-    // 更新用户的状态信息
-    if (user.getId() != -1)
-    {
-        user.setState("offline");
-        _userModel.updateState(user);
-    }
 }
 // 一对一聊天业务
 void ChatService::oneChat(const TcpConnectionPtr &conn, json &js, Timestamp time)
@@ -282,8 +290,9 @@ void ChatService::oneChat(const TcpConnectionPtr &conn, json &js, Timestamp time
     }
 
     // 用户在其他主机的情况，publish消息到redis
-    User user = _userModel.query(toid);
-    if (user.getState() == "online")
+    // User user = _userModel.query(toid);
+    string state = _redis.get("user:" + to_string(toid));
+    if (!state.empty())
     {
         _redis.publish(toid, js.dump());
         return;
@@ -345,8 +354,8 @@ void ChatService::groupChat(const TcpConnectionPtr &conn, json &js, Timestamp ti
         else
         {
             // 查询toid是否在线
-            User user = _userModel.query(id);
-            if (user.getState() == "online")
+            string state = _redis.get("user:" + to_string(id));
+            if (!state.empty())
             {
                 // 向群组成员publish信息
                 _redis.publish(id, js.dump());

@@ -135,3 +135,30 @@ void Redis::init_notify_handler(redis_handler handler)
 {
     notify_message_handler_ = handler;
 }
+
+bool Redis::set(const string& key, const string& value) {
+    if (publish_context_ == nullptr || publish_context_->err) return false;
+    redisReply* reply = (redisReply*)redisCommand(publish_context_, "SET %s %s", key.c_str(), value.c_str());
+    if (!reply) return false;
+    freeReplyObject(reply);
+    return true;
+}
+
+string Redis::get(const string& key) {
+    if (publish_context_ == nullptr || publish_context_->err) return "";
+    redisReply* reply = (redisReply*)redisCommand(publish_context_, "GET %s", key.c_str());
+    string res = "";
+    if (reply && reply->type == REDIS_REPLY_STRING) {
+        res = reply->str;
+    }
+    if (reply) freeReplyObject(reply);
+    return res;
+}
+
+bool Redis::del(const string& key) {
+    if (publish_context_ == nullptr || publish_context_->err) return false;
+    redisReply* reply = (redisReply*)redisCommand(publish_context_, "DEL %s", key.c_str());
+    bool ret = reply && reply->integer == 1;
+    if (reply) freeReplyObject(reply);
+    return ret;
+}
