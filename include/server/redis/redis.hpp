@@ -32,7 +32,18 @@ public:
     //初始化业务层上报通道消息的回调对象
     void init_notify_handler(redis_handler handler);
 
+    // 设置键值对
+    bool set(const string& key, const string& value);
+
+    // 获取键值对
+    string get(const std::string& key);
+
+    // 删除键
+    bool del(const std::string& key);
+
+
 private:
+
     //hiredis同步上下文对象，负责publish消息
     redisContext *publish_context_;
 

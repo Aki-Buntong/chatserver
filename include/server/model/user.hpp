@@ -13,11 +13,10 @@ private:
    std::string state;
 
 public:
-  User(int id=-1, std::string name="", std::string pwd="", std::string state="offline"){
+  User(int id=-1, std::string name="", std::string pwd=""){
     this->id = id;
     this->name = name;
     this->password = pwd;
-    this->state = state;
   }
   void setId(int id){this->id = id;}
   void setName(std::string name){this->name = name;}
@@ -28,8 +27,6 @@ public:
   std::string getName(){return name;}
   std::string getPwd(){return password;}
   std::string getState(){return state;}
-
-
 };
 
 

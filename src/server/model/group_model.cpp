@@ -74,7 +74,7 @@ std::vector<Group> GroupModel::queryGroups(int userid)
     // 查询群组的用户信息
     for (Group &group : groupVec)
     {
-        snprintf(sql, sizeof(sql), "select a.id,a.name,a.state,b.grouprole from User a \
+        snprintf(sql, sizeof(sql), "select a.id,a.name,b.grouprole from User a \
             inner join GroupUser b on b.userid = a.id where b.groupid=%d",
                 group.getId());
 
@@ -87,8 +87,7 @@ std::vector<Group> GroupModel::queryGroups(int userid)
                 GroupUser user;
                 user.setId(atoi(row[0]));
                 user.setName(row[1]);
-                user.setState(row[2]);
-                user.setRole(row[3]);
+                user.setRole(row[2]);
                 group.getUsers().push_back(user);
             }
             mysql_free_result(res);
